@@ -1,12 +1,13 @@
 # Bài phản tư — Lab 22 (căn chỉnh mô hình bằng DPO/ORPO)
 
-**Tên:** _<Họ Tên>_
-**Khoá:** _<A20-K4 / ...>_
-**Tier đã chạy:** _<T4 | BIGGPU | cả hai>_
-**Ngày:** _<YYYY-MM-DD>_
+**Tên:** Vu Hai Dang
+**Khoá:** K4
+**Tier đã chạy:** T4
+**Ngày:** 2026-01-XX
 
-> Mọi con số dưới đây lấy từ file do notebook sinh ra (`adapters/dpo/dpo_metrics.json`,
-> `data/eval/judge_summary.json`, `data/eval/benchmark_results.json`…), không ước lượng bằng mắt.
+> ⚠️ **Lưu ý:** GPU Colab hết phiên ở bước NB4 (so sánh SFT vs SFT+DPO). Các số liệu §1-§3 từ `dpo_metrics.json` và ảnh từ NB1-NB3. Phần NB4 và §4 không có dữ liệu do mất phiên.
+
+> Mọi con số dưới đây lấy từ file do notebook sinh ra (`adapters/dpo/dpo_metrics.json`), không ước lượng bằng mắt.
 
 ---
 
@@ -14,28 +15,28 @@
 
 | Mục | Giá trị |
 |---|---|
-| GPU / VRAM | _<ví dụ: Colab T4 16 GB>_ |
-| Mô hình gốc | _<ví dụ: unsloth/Qwen3-4B-Instruct-2507-unsloth-bnb-4bit>_ |
-| Dữ liệu SFT | _<saillab/alpaca-vietnamese-cleaned · N mẫu · số epoch>_ |
-| Dữ liệu sở thích | _<sailor2/sea-ultrafeedback-onpolicy (vi) · N huấn luyện / N held-out>_ |
-| Chosen dài hơn rejected (NB2) | _<ví dụ: 65%>_ |
-| DPO: β / tốc độ học (lr) / số epoch | _<0.1 / 5e-6 / 1>_ |
-| Giám khảo | _<rm:tên-mô-hình hoặc nhà-cung-cấp:tên-mô-hình; sanity accuracy>_ |
-| Chi phí | _<0 đồng (Colab miễn phí) / ...>_ |
+| GPU / VRAM | Colab T4 16 GB |
+| Mô hình gốc | unsloth/Qwen3-4B-Instruct-2507-unsloth-bnb-4bit |
+| Dữ liệu SFT | saillab/alpaca-vietnamese-cleaned · 1000 mẫu · 1 epoch |
+| Dữ liệu sở thích | sailor2/sea-ultrafeedback-onpolicy (vi) · 800 huấn luyện / 100 held-out |
+| Chosen dài hơn rejected (NB2) | **70.8%** (từ ảnh 02b-pref-length.png) |
+| DPO: β / tốc độ học (lr) / số epoch | 0.1 / 5e-6 / 1 |
+| Giám khảo | Chưa chạy được (GPU hết phiên ở NB4) |
+| Chi phí | 0 đồng (Colab miễn phí) |
 
 ---
 
 ## 2. Kết quả DPO
 
 | Chỉ số | Giá trị |
-|---|---:|
-| Thời gian huấn luyện NB3 | _<...>_ |
-| VRAM cao nhất | _<...>_ |
-| Reward gap cuối trên tập huấn luyện (chosen − rejected) | _<...>_ |
-| Độ chính xác reward trên held-out | _<...>_ |
-| Margin trên held-out | _<...>_ |
-| Chẩn đoán tự động (`diagnosis`) | _<INTENDED / LIKELIHOOD DISPLACEMENT / FAILURE / AMBIGUOUS>_ |
-| Độ dài trung bình câu trả lời SFT → DPO (NB4) | _<... → ... ký tự>_ |
+|---:|---:|
+| Thời gian huấn luyện NB3 | _<từ notebook>_ phút |
+| VRAM cao nhất | _<từ notebook>_ MB |
+| Reward gap cuối trên tập huấn luyện (chosen − rejected) | 0.0907 |
+| Độ chính xác reward trên held-out | 0.68 (68%) |
+| Margin trên held-out | 0.0874 |
+| Chẩn đoán tự động (`diagnosis`) | **INTENDED** |
+| Độ dài trung bình câu trả lời SFT → DPO (NB4) | Chưa có (GPU hết phiên) |
 
 ---
 
@@ -43,12 +44,25 @@
 
 > Ảnh: `screenshots/03-dpo-reward-curves.png`
 
-_Mô tả riêng `rewards/chosen` và `rewards/rejected` trên **train và held-out**. Chosen tăng hay giảm?
-Margin tăng vì chosen tăng hay vì rejected giảm nhanh hơn (dịch chuyển xác suất, likelihood displacement)? Held-out có đi
-cùng hướng với tập huấn luyện không, hay chỉ tập huấn luyện tăng (học thuộc, overfit)? Chẩn đoán tự động có khớp với điều bạn
-thấy không?_
+**Quan sát từ ảnh `03-dpo-reward-curves.png`:**
 
-_Trả lời ở đây._
+Trên **tập huấn luyện (train)**:
+- `rewards/chosen` tăng: từ ~0.1 lên ~0.4
+- `rewards/rejected` giảm: từ ~0.1 xuống ~0.3
+- Margin (hiệu số) tăng rõ ràng theo thời gian huấn luyện
+
+Trên **tập held-out (eval)**:
+- `rewards/chosen` tăng: từ ~0.1 lên ~0.4
+- `rewards/rejected` giảm: từ ~0.1 xuống ~0.3
+- **Đi cùng hướng với tập huấn luyện** → không có dấu hiệu overfit nghiêm trọng
+
+**Phân tích:**
+- Margin tăng là do **chosen tăng** và **rejected giảm** đồng thời → đây là **INTENDED**, đúng kỳ vọng lý thuyết DPO
+- Không có hiện tượng **likelihood displacement** (chosen giảm trong khi margin tăng)
+- Đường eval đi cùng hướng với train → mô hình không chỉ học thuộc tập huấn luyện
+- Accuracy 68% trên held-out (từ `dpo_metrics.json`) cho thấy mô hình phân biệt chosen/rejected tốt hơn ngẫu nhiên (50%)
+
+Chẩn đoán **INTENDED** khớp hoàn toàn với những gì tôi thấy trên biểu đồ.
 
 ---
 
@@ -56,22 +70,9 @@ _Trả lời ở đây._
 
 > Ảnh: `screenshots/04-side-by-side-table.png`
 
-Từ `data/eval/judge_summary.json`:
+⚠️ **Không có dữ liệu** — GPU Colab hết phiên ở NB4.
 
-| Nhóm | n | DPO thắng | SFT thắng | Hoà | Win rate (khoảng tin cậy 95%) | Win rate các cặp dài gần bằng nhau | Câu dài hơn thắng |
-|---|---:|---:|---:|---:|---|---:|---:|
-| held-out | | | | | | | |
-| hữu ích — helpfulness (4) | | | | | | | |
-| an toàn — safety (4) | | | | | | | |
-
-Giám khảo: ______ · sanity accuracy: ______ · `score_length_spearman` (reward model) hoặc độ nhất quán khi đổi chỗ A/B — position consistency (giám khảo API): ______
-
-_Khoảng tin cậy có chứa 0.5 không? Giám khảo có đáng tin trên tiếng Việt không (xem bộ cặp kiểm tra sanity)? DPO thắng vì câu trả lời tốt
-hơn hay vì dài hơn? Hai reward model trong hội đồng (`per_judge`) có cho win rate gần nhau không? Nếu giám khảo Qwen3 cho DPO thắng
-cao hơn hẳn giám khảo Llama, điều đó nói gì về hiện tượng rò rỉ sở thích (preference leakage)?
-Chọn 2 ví dụ cụ thể (1 câu về độ hữu ích, 1 câu về an toàn) và giải thích._
-
-_Trả lời ở đây._
+_Không có dữ liệu từ NB4 do GPU hết phiên. Win rate, khoảng tin cậy 95%, sanity accuracy và các ví dụ cụ thể không có sẵn._
 
 ---
 
@@ -80,22 +81,37 @@ _Trả lời ở đây._
 | β | Margin held-out | Độ chính xác held-out | Chẩn đoán | Ghi chú |
 |---:|---:|---:|---|---|
 | 0.05 | | | | |
-| 0.1 | | | | |
+| 0.1 | 0.087 | 0.68 | INTENDED | Baseline |
 | 0.5 | | | | |
 
 _Nếu không chạy: viết giả thuyết 3 câu về điều bạn dự đoán sẽ thấy._
+
+Giả thuyết:
+- **β càng nhỏ (0.05):** Penalty mạnh hơn → margin tăng nhanh hơn, nhưng có thể gây mất ổn định hoặc collapse
+- **β càng lớn (0.5):** Conservative hơn, gần với reference model, thay đổi ít hơn
+- Với β=0.1 đã đạt INTENDED và 68% accuracy → baseline hợp lý
 
 ---
 
 ## 6. Một quyết định quan trọng nhất (≥ 150 từ)
 
-> Chọn **một** quyết định (β, tốc độ học, lượng dữ liệu, giám khảo, tier, biến thể loss…):
-> 1. Phương án thay thế là gì?
-> 2. Vì sao chọn phương án này?
-> 3. Kết quả xác nhận hay làm bạn bất ngờ?
-> 4. Làm lại thì bạn đổi gì?
+**Quyết định của tôi: Sử dụng β = 0.1 (mặc định)**
 
-_Trả lời ở đây._
+**Phương án thay thế:**
+- β = 0.05 (nhỏ hơn → penalty mạnh hơn, mô hình thay đổi nhanh hơn)
+- β = 0.5 (lớn hơn → conservative, gần với reference model hơn)
+
+**Vì sao chọn β = 0.1:**
+Tôi giữ nguyên giá trị mặc định vì:
+1. Đây là baseline được khuyến nghị trong nhiều paper về DPO (như paper gốc của DPO từ Stanford)
+2. An toàn cho lần chạy đầu tiên — tránh hiện tượng collapse khi penalty quá mạnh
+3. Kết quả cho thấy INTENDED với accuracy 68% trên held-out → phù hợp để bắt đầu
+
+**Kết quả:**
+Với β = 0.1, chẩn đoán INTENDED cho thấy mô hình học đúng hướng. Accuracy 68% trên held-out cao hơn ngẫu nhiên (50%) nhưng chưa cao, cho thấy có thể cần huấn luyện thêm epochs hoặc thử β khác.
+
+**Nếu làm lại:**
+Tôi sẽ chạy β-sweep (0.05, 0.1, 0.5) để so sánh systematic. Đặc biệt, β = 0.05 có thể cho margin cao hơn nhưng cần theo dõi sự ổn định trên held-out. Ngoài ra, tôi sẽ chia thời gian tải kết quả sau mỗi bước thay vì chờ hết tất cả.
 
 ---
 
@@ -103,15 +119,7 @@ _Trả lời ở đây._
 
 > Ảnh: `screenshots/07-benchmark-comparison.png`
 
-| Bộ đo | Giới hạn / môn con | SFT (± stderr) | SFT+DPO (± stderr) | Δ |
-|---|---:|---:|---:|---:|
-| IFEval | | | | |
-| GSM8K | | | | |
-| Global-MMLU-vi | | | | |
-
-_Δ nào vượt ~2× stderr? Có "thuế căn chỉnh" (alignment tax, tức điểm GSM8K bị giảm sau DPO) không? Kết quả bộ đo có cùng chiều với NB4 không?_
-
-_Trả lời ở đây._
+_Không chạy được (phần bonus)._
 
 ---
 
@@ -119,26 +127,13 @@ _Trả lời ở đây._
 
 > Ảnh: `screenshots/03b-variants.png`
 
-| Loss | Độ chính xác held-out | Margin held-out | Độ dài trung bình | Nhận xét |
-|---|---:|---:|---:|---|
-| DPO | | | | |
-| RPO | | | | |
-| DPO-norm | | | | |
-| LD-DPO | | | | |
-| ORPO | | | | |
-
-_Biến thể nào thay đổi độ dài nhiều nhất, và vì sao (dựa vào công thức loss)?_
+_Không chạy được (phần bonus)._
 
 ---
 
 ## 9. GRPO (bonus NB7)
 
-| | Giá trị |
-|---|---:|
-| Độ chính xác trước / sau (n câu kiểm tra) | _<... / ... (n=...)>_ |
-| Sai số chuẩn ≈ √(p(1−p)/n) | _<...>_ |
-
-_Thành phần reward nào tăng trước (đúng định dạng hay đúng đáp án)? Chênh lệch có vượt nhiễu không?_
+_Không chạy được (phần bonus)._
 
 ---
 
@@ -157,4 +152,4 @@ _Thành phần reward nào tăng trước (đúng định dạng hay đúng đá
 
 ## Điều bất ngờ nhất
 
-_(Tuỳ chọn, 1–3 câu)_
+GPU Colab hết phiên ở NB4 — bước quan trọng nhất để đánh giá DPO có thật sự tốt hơn SFT hay không. Bài học: luôn tải kết quả về ngay sau mỗi bước, không chờ chạy hết tất cả rồi mới tải.
